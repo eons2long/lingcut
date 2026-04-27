@@ -76,6 +76,7 @@ add_executable(shotcut WIN32 MACOSX_BUNDLE
   jobs/meltjob.cpp jobs/meltjob.h
   jobs/postjobaction.cpp jobs/postjobaction.h
   jobs/qimagejob.cpp jobs/qimagejob.h
+  jobs/qwen3asrjob.cpp jobs/qwen3asrjob.h
   jobs/screencapturejob.cpp jobs/screencapturejob.h
   jobs/videoqualityjob.cpp jobs/videoqualityjob.h
   jobs/whisperjob.cpp jobs/whisperjob.h
@@ -338,29 +339,43 @@ endif()
 if(APPLE)
   target_sources(shotcut PRIVATE macos.mm macos.h
     widgets/metalvideowidget.h widgets/metalvideowidget.mm)
+  option(SHOTCUT_DEV_BUNDLE "Build macOS as an isolated development app bundle." OFF)
+  set(SHOTCUT_MACOS_BUNDLE_NAME "Shotcut")
+  set(SHOTCUT_MACOS_EXECUTABLE_NAME "Shotcut")
+  set(SHOTCUT_MACOS_BUNDLE_IDENTIFIER "com.Meltytech.Shotcut")
+  set(SHOTCUT_MACOS_ICON_NAME "shotcut.icns")
+  set(APP_ICON ${CMAKE_SOURCE_DIR}/packaging/macos/shotcut.icns)
+  if(SHOTCUT_DEV_BUNDLE)
+    set(SHOTCUT_MACOS_BUNDLE_NAME "Shotcut Dev")
+    set(SHOTCUT_MACOS_EXECUTABLE_NAME "Shotcut Dev")
+    set(SHOTCUT_MACOS_BUNDLE_IDENTIFIER "com.Meltytech.ShotcutDev")
+    set(SHOTCUT_MACOS_ICON_NAME "shotcut-dev.icns")
+    set(APP_ICON ${CMAKE_SOURCE_DIR}/packaging/macos/shotcut-dev.icns)
+    target_compile_definitions(shotcut PRIVATE SHOTCUT_APPLICATION_NAME="Shotcut Dev")
+  endif()
   set_target_properties(shotcut PROPERTIES
-    OUTPUT_NAME "Shotcut"
+    OUTPUT_NAME "${SHOTCUT_MACOS_EXECUTABLE_NAME}"
     MACOSX_BUNDLE_INFO_PLIST ${CMAKE_SOURCE_DIR}/packaging/macos/Info.plist.in)
   find_library(FOUNDATION Foundation)
   find_library(COCOA Cocoa)
   target_link_libraries(shotcut PRIVATE ${FOUNDATION} ${COCOA})
-  set(APP_ICON ${CMAKE_SOURCE_DIR}/packaging/macos/shotcut.icns)
   target_sources(shotcut PRIVATE ${APP_ICON})
   set_source_files_properties(${APP_ICON} PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
 
   # Create a symlink to the qml folder after building
   # These are skipped for release because it breaks the app bundling and is only for development.
   if(NOT CMAKE_BUILD_TYPE STREQUAL "Release")
-    file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/Shotcut.app/Contents/Resources/shotcut)
-    file(CREATE_LINK ${CMAKE_SOURCE_DIR}/src/qml ${CMAKE_CURRENT_BINARY_DIR}/Shotcut.app/Contents/Resources/shotcut/qml SYMBOLIC)
-    file(CREATE_LINK ${CMAKE_SOURCE_DIR}/filter-sets ${CMAKE_CURRENT_BINARY_DIR}/Shotcut.app/Contents/Resources/shotcut/filter-sets SYMBOLIC)
-    file(CREATE_LINK ${CMAKE_SOURCE_DIR}/voices ${CMAKE_CURRENT_BINARY_DIR}/Shotcut.app/Contents/Resources/shotcut/voices SYMBOLIC)
+    set(SHOTCUT_MACOS_APP_RESOURCES_DIR "${CMAKE_CURRENT_BINARY_DIR}/${SHOTCUT_MACOS_BUNDLE_NAME}.app/Contents/Resources/shotcut")
+    file(MAKE_DIRECTORY ${SHOTCUT_MACOS_APP_RESOURCES_DIR})
+    file(CREATE_LINK ${CMAKE_SOURCE_DIR}/src/qml ${SHOTCUT_MACOS_APP_RESOURCES_DIR}/qml SYMBOLIC)
+    file(CREATE_LINK ${CMAKE_SOURCE_DIR}/filter-sets ${SHOTCUT_MACOS_APP_RESOURCES_DIR}/filter-sets SYMBOLIC)
+    file(CREATE_LINK ${CMAKE_SOURCE_DIR}/voices ${SHOTCUT_MACOS_APP_RESOURCES_DIR}/voices SYMBOLIC)
   endif()
 
   install(TARGETS shotcut BUNDLE DESTINATION ${CMAKE_INSTALL_PREFIX})
-  install(DIRECTORY qml DESTINATION ${CMAKE_INSTALL_PREFIX}/Shotcut.app/Contents/Resources/shotcut/)
-  install(DIRECTORY ${CMAKE_SOURCE_DIR}/filter-sets DESTINATION ${CMAKE_INSTALL_PREFIX}/Shotcut.app/Contents/Resources/shotcut/)
-  install(DIRECTORY ${CMAKE_SOURCE_DIR}/voices DESTINATION ${CMAKE_INSTALL_PREFIX}/Shotcut.app/Contents/Resources/shotcut/)
+  install(DIRECTORY qml DESTINATION ${CMAKE_INSTALL_PREFIX}/${SHOTCUT_MACOS_BUNDLE_NAME}.app/Contents/Resources/shotcut/)
+  install(DIRECTORY ${CMAKE_SOURCE_DIR}/filter-sets DESTINATION ${CMAKE_INSTALL_PREFIX}/${SHOTCUT_MACOS_BUNDLE_NAME}.app/Contents/Resources/shotcut/)
+  install(DIRECTORY ${CMAKE_SOURCE_DIR}/voices DESTINATION ${CMAKE_INSTALL_PREFIX}/${SHOTCUT_MACOS_BUNDLE_NAME}.app/Contents/Resources/shotcut/)
 endif()
 
 if(UNIX AND NOT APPLE)

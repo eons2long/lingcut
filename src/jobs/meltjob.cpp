@@ -30,7 +30,40 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QIODevice>
+#include <QStandardPaths>
 #include <QTimer>
+
+static QFileInfo meltExecutable()
+{
+    QString shotcutPath = qApp->applicationDirPath();
+#if defined(Q_OS_UNIX) && !defined(Q_OS_MAC)
+    const QString exe = QStringLiteral("melt-7");
+#else
+    const QString exe = QStringLiteral("melt");
+#endif
+    QFileInfo meltPath(shotcutPath, exe);
+    if (meltPath.isExecutable()) {
+        return meltPath;
+    }
+
+    const QString systemPath = QStandardPaths::findExecutable(exe);
+    if (!systemPath.isEmpty()) {
+        return QFileInfo(systemPath);
+    }
+
+#ifdef Q_OS_MAC
+    const QStringList homebrewPaths{QStringLiteral("/opt/homebrew/bin/melt"),
+                                    QStringLiteral("/usr/local/bin/melt")};
+    for (const QString &path : homebrewPaths) {
+        QFileInfo info(path);
+        if (info.isExecutable()) {
+            return info;
+        }
+    }
+#endif
+
+    return meltPath;
+}
 
 MeltJob::MeltJob(const QString &name,
                  const QString &xml,
@@ -121,12 +154,7 @@ void MeltJob::start()
         QTimer::singleShot(0, this, [=]() { emit finished(this, false); });
         return;
     }
-    QString shotcutPath = qApp->applicationDirPath();
-#if defined(Q_OS_UNIX) && !defined(Q_OS_MAC)
-    QFileInfo meltPath(shotcutPath, "melt-7");
-#else
-    QFileInfo meltPath(shotcutPath, "melt");
-#endif
+    QFileInfo meltPath = meltExecutable();
     setReadChannel(QProcess::StandardError);
     QStringList args;
     args << "-verbose";

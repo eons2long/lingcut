@@ -373,6 +373,14 @@ public:
     QString whisperModel();
     void setWhisperUseGpu(bool b);
     bool whisperUseGpu() const;
+    void setAsrEngine(const QString &engine);
+    QString asrEngine() const;
+    void setQwen3AsrExe(const QString &path);
+    QString qwen3AsrExe();
+    void setQwen3AsrModelDir(const QString &path);
+    QString qwen3AsrModelDir();
+    void setQwen3AsrVadModel(const QString &path);
+    QString qwen3AsrVadModel();
 
     // Notes
     void setNotesZoom(int zoom);

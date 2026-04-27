@@ -3,7 +3,11 @@
 <plist version="0.9">
 <dict>
 	<key>CFBundleIconFile</key>
-	<string>shotcut.icns</string>
+	<string>@SHOTCUT_MACOS_ICON_NAME@</string>
+	<key>CFBundleName</key>
+	<string>@SHOTCUT_MACOS_BUNDLE_NAME@</string>
+	<key>CFBundleDisplayName</key>
+	<string>@SHOTCUT_MACOS_BUNDLE_NAME@</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleInfoDictionaryVersion</key>
@@ -13,9 +17,9 @@
 	<key>CFBundleSignature</key>
 	<string>scut</string>
 	<key>CFBundleExecutable</key>
-	<string>Shotcut</string>
+	<string>@SHOTCUT_MACOS_EXECUTABLE_NAME@</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.Meltytech.Shotcut</string>
+	<string>@SHOTCUT_MACOS_BUNDLE_IDENTIFIER@</string>
 	<key>CFBundleVersion</key>
 	<string>@SHOTCUT_VERSION@</string>
 	<key>CFBundleShortVersionString</key>

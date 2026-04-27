@@ -21,6 +21,7 @@
 #include "models/extensionmodel.h"
 
 #include <QDialog>
+#include <QList>
 
 class QAbstractButton;
 class QCheckBox;
@@ -38,6 +39,7 @@ class TranscribeAudioDialog : public QDialog
 public:
     explicit TranscribeAudioDialog(const QString &trackName, QWidget *parent);
     QString name();
+    QString engine();
     QString language();
     QList<int> tracks();
     bool translate();
@@ -56,10 +58,11 @@ private:
     void refreshModels(bool report = true);
     void downloadModel(int index);
     void setCurrentModel(int index);
-    void updateWhisperStatus();
+    void updateAsrStatus();
     void showModelContextMenu(QPoint p);
     ExtensionModel m_model;
     QLineEdit *m_name;
+    QComboBox *m_engine;
     QComboBox *m_lang;
     QCheckBox *m_translate;
     QSpinBox *m_maxLength;
@@ -69,8 +72,13 @@ private:
     QWidget *m_configWidget;
     QLineEdit *m_exeLabel;
     QLineEdit *m_modelLabel;
+    QLineEdit *m_qwenExeLabel;
+    QLineEdit *m_qwenModelLabel;
+    QLineEdit *m_qwenVadLabel;
     QDialogButtonBox *m_buttonBox;
     QTreeView *m_table;
+    QList<QWidget *> m_whisperWidgets;
+    QList<QWidget *> m_qwenWidgets;
 };
 
 #endif // TRANSCRIBEAUDIODIALOG_H

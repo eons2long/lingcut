@@ -46,6 +46,24 @@
 static const QString WHISPER_MODEL_EXTENSION_URL = QStringLiteral(
     "https://check.shotcut.org/whispermodel.qml");
 
+static QString resolvedWhisperExecutable(const QString &path)
+{
+    QFileInfo info(path);
+    if (info.isDir() && info.suffix() == QStringLiteral("app")) {
+        QDir appDir(path);
+#if defined(Q_OS_WIN)
+        const QString exe = appDir.absoluteFilePath(QStringLiteral("Contents/MacOS/whisper-cli.exe"));
+#else
+        const QString exe = appDir.absoluteFilePath(QStringLiteral("Contents/MacOS/whisper-cli"));
+#endif
+        QFileInfo exeInfo(exe);
+        if (exeInfo.isFile() && exeInfo.isExecutable()) {
+            return exe;
+        }
+    }
+    return path;
+}
+
 // List of supported languages from whispercpp
 static const std::vector<const char *> whisperLanguages = {
     "en", "zh", "de", "es",  "ru", "ko", "fr", "ja", "pt", "tr",  "pl", "ca", "nl", "ar", "sv",
@@ -98,7 +116,20 @@ TranscribeAudioDialog::TranscribeAudioDialog(const QString &trackName, QWidget *
     m_name->setText(trackName);
     grid->addWidget(m_name, 0, 1);
 
-    grid->addWidget(new QLabel(tr("Language")), 1, 0, Qt::AlignRight);
+    grid->addWidget(new QLabel(tr("Engine")), 1, 0, Qt::AlignRight);
+    m_engine = new QComboBox(this);
+    m_engine->addItem(tr("Whisper.cpp"), QStringLiteral("whisper"));
+    m_engine->addItem(tr("Qwen3-ASR 0.6B int8"), QStringLiteral("qwen3-asr-0.6b-int8"));
+    const QString engine = Settings.asrEngine();
+    for (int i = 0; i < m_engine->count(); ++i) {
+        if (m_engine->itemData(i).toString() == engine) {
+            m_engine->setCurrentIndex(i);
+            break;
+        }
+    }
+    grid->addWidget(m_engine, 1, 1);
+
+    grid->addWidget(new QLabel(tr("Language")), 2, 0, Qt::AlignRight);
     m_lang = new QComboBox(this);
     fillLanguages(m_lang);
     // Try to set the default to the system language
@@ -119,33 +150,37 @@ TranscribeAudioDialog::TranscribeAudioDialog(const QString &trackName, QWidget *
             }
         }
     }
-    grid->addWidget(m_lang, 1, 1);
+    grid->addWidget(m_lang, 2, 1);
 
     m_translate = new QCheckBox(this);
     m_translate->setCheckState(Qt::Unchecked);
-    grid->addWidget(m_translate, 2, 0, Qt::AlignRight);
-    grid->addWidget(new QLabel(tr("Translate to English")), 2, 1, Qt::AlignLeft);
+    QLabel *translateLabel = new QLabel(tr("Translate to English"));
+    grid->addWidget(m_translate, 3, 0, Qt::AlignRight);
+    grid->addWidget(translateLabel, 3, 1, Qt::AlignLeft);
+    m_whisperWidgets << m_translate << translateLabel;
 
-    grid->addWidget(new QLabel(tr("Maximum line length")), 3, 0, Qt::AlignRight);
+    grid->addWidget(new QLabel(tr("Maximum line length")), 4, 0, Qt::AlignRight);
     m_maxLength = new QSpinBox(this);
     m_maxLength->setRange(10, 100);
     m_maxLength->setValue(42);
     m_maxLength->setSuffix(" characters");
-    grid->addWidget(m_maxLength, 3, 1);
+    grid->addWidget(m_maxLength, 4, 1);
 
     m_nonspoken = new QCheckBox(this);
     m_nonspoken->setCheckState(Qt::Unchecked);
-    grid->addWidget(m_nonspoken, 4, 0, Qt::AlignRight);
-    grid->addWidget(new QLabel(tr("Include non-spoken sounds")), 4, 1, Qt::AlignLeft);
+    grid->addWidget(m_nonspoken, 5, 0, Qt::AlignRight);
+    grid->addWidget(new QLabel(tr("Include non-spoken sounds")), 5, 1, Qt::AlignLeft);
 
     m_useGpu = new QCheckBox(this);
     m_useGpu->setCheckState(Settings.whisperUseGpu() ? Qt::Checked : Qt::Unchecked);
-    grid->addWidget(m_useGpu, 5, 0, Qt::AlignRight);
-    grid->addWidget(new QLabel(tr("Use GPU")), 5, 1, Qt::AlignLeft);
+    QLabel *useGpuLabel = new QLabel(tr("Use GPU"));
+    grid->addWidget(m_useGpu, 6, 0, Qt::AlignRight);
+    grid->addWidget(useGpuLabel, 6, 1, Qt::AlignLeft);
+    m_whisperWidgets << m_useGpu << useGpuLabel;
 
     QLabel *tracksLabel = new QLabel(tr("Tracks with speech"));
     tracksLabel->setToolTip(tr("Select tracks that contain speech to be transcribed."));
-    grid->addWidget(tracksLabel, 6, 0, Qt::AlignRight);
+    grid->addWidget(tracksLabel, 7, 0, Qt::AlignRight);
     m_trackList = new QListWidget(this);
     m_trackList->setSelectionMode(QAbstractItemView::NoSelection);
     m_trackList->setSizeAdjustPolicy(QAbstractScrollArea::AdjustToContentsOnFirstShow);
@@ -177,7 +212,7 @@ TranscribeAudioDialog::TranscribeAudioDialog(const QString &trackName, QWidget *
             }
         }
     }
-    grid->addWidget(m_trackList, 6, 1, Qt::AlignLeft);
+    grid->addWidget(m_trackList, 7, 1, Qt::AlignLeft);
 
     // The config section is a single widget with a unique grid layout inside of it.
     // The config section is hidden by hiding the config widget (and the layout it contains)
@@ -193,7 +228,8 @@ TranscribeAudioDialog::TranscribeAudioDialog(const QString &trackName, QWidget *
     configLayout->addWidget(line, 0, 0, 1, 2);
 
     // Whisper.cpp exe
-    configLayout->addWidget(new QLabel(tr("Whisper.cpp executable")), 1, 0, Qt::AlignRight);
+    QLabel *whisperExeLabel = new QLabel(tr("Whisper.cpp executable"));
+    configLayout->addWidget(whisperExeLabel, 1, 0, Qt::AlignRight);
     m_exeLabel = new QLineEdit(this);
     m_exeLabel->setFixedWidth(maxPathWidth);
     m_exeLabel->setReadOnly(true);
@@ -202,21 +238,23 @@ TranscribeAudioDialog::TranscribeAudioDialog(const QString &trackName, QWidget *
     exeBrowseButton->setIcon(
         QIcon::fromTheme("document-open", QIcon(":/icons/oxygen/32x32/actions/document-open.png")));
     connect(exeBrowseButton, &QAbstractButton::clicked, this, [&] {
-        auto path = QFileDialog::getOpenFileName(this,
-                                                 tr("Find Whisper.cpp"),
-                                                 Settings.whisperExe(),
-                                                 QString(),
-                                                 nullptr,
-                                                 Util::getFileDialogOptions());
-        if (QFileInfo(path).isExecutable()) {
+        auto path = resolvedWhisperExecutable(QFileDialog::getOpenFileName(this,
+                                                                           tr("Find Whisper.cpp"),
+                                                                           Settings.whisperExe(),
+                                                                           QString(),
+                                                                           nullptr,
+                                                                           Util::getFileDialogOptions()));
+        QFileInfo exeInfo(path);
+        if (exeInfo.isFile() && exeInfo.isExecutable()) {
             Settings.setWhisperExe(path);
-            updateWhisperStatus();
+            updateAsrStatus();
         }
     });
     configLayout->addWidget(exeBrowseButton, 1, 2, Qt::AlignLeft);
 
     // Whisper.cpp model
-    configLayout->addWidget(new QLabel(tr("GGML Model")), 2, 0, Qt::AlignRight);
+    QLabel *whisperModelLabel = new QLabel(tr("GGML Model"));
+    configLayout->addWidget(whisperModelLabel, 2, 0, Qt::AlignRight);
     m_modelLabel = new QLineEdit(this);
     m_modelLabel->setFixedWidth(maxPathWidth);
     m_modelLabel->setPlaceholderText(tr("Select a model or browse to choose one"));
@@ -235,12 +273,91 @@ TranscribeAudioDialog::TranscribeAudioDialog(const QString &trackName, QWidget *
         if (QFileInfo(path).exists()) {
             LOG_INFO() << "Model found" << path;
             Settings.setWhisperModel(path);
-            updateWhisperStatus();
+            updateAsrStatus();
         } else {
             LOG_INFO() << "Model not found" << path;
         }
     });
     configLayout->addWidget(modelBrowseButton, 2, 2, Qt::AlignLeft);
+
+    m_whisperWidgets << whisperExeLabel << m_exeLabel << exeBrowseButton << whisperModelLabel
+                     << m_modelLabel << modelBrowseButton;
+
+    // Qwen3-ASR executable
+    QLabel *qwenExeLabel = new QLabel(tr("Qwen3-ASR executable"));
+    configLayout->addWidget(qwenExeLabel, 3, 0, Qt::AlignRight);
+    m_qwenExeLabel = new QLineEdit(this);
+    m_qwenExeLabel->setFixedWidth(maxPathWidth);
+    m_qwenExeLabel->setReadOnly(true);
+    configLayout->addWidget(m_qwenExeLabel, 3, 1, Qt::AlignLeft);
+    QPushButton *qwenExeBrowseButton = new QPushButton(this);
+    qwenExeBrowseButton->setIcon(
+        QIcon::fromTheme("document-open", QIcon(":/icons/oxygen/32x32/actions/document-open.png")));
+    connect(qwenExeBrowseButton, &QAbstractButton::clicked, this, [&] {
+        auto path = QFileDialog::getOpenFileName(this,
+                                                 tr("Find Qwen3-ASR executable"),
+                                                 Settings.qwen3AsrExe(),
+                                                 QString(),
+                                                 nullptr,
+                                                 Util::getFileDialogOptions());
+        if (QFileInfo(path).isExecutable()) {
+            Settings.setQwen3AsrExe(path);
+            updateAsrStatus();
+        }
+    });
+    configLayout->addWidget(qwenExeBrowseButton, 3, 2, Qt::AlignLeft);
+
+    // Qwen3-ASR model folder
+    QLabel *qwenModelLabel = new QLabel(tr("Qwen3-ASR model folder"));
+    configLayout->addWidget(qwenModelLabel, 4, 0, Qt::AlignRight);
+    m_qwenModelLabel = new QLineEdit(this);
+    m_qwenModelLabel->setFixedWidth(maxPathWidth);
+    m_qwenModelLabel->setPlaceholderText(tr("Select the folder containing Qwen3-ASR ONNX files"));
+    m_qwenModelLabel->setReadOnly(true);
+    configLayout->addWidget(m_qwenModelLabel, 4, 1, Qt::AlignLeft);
+    QPushButton *qwenModelBrowseButton = new QPushButton(this);
+    qwenModelBrowseButton->setIcon(
+        QIcon::fromTheme("document-open", QIcon(":/icons/oxygen/32x32/actions/document-open.png")));
+    connect(qwenModelBrowseButton, &QAbstractButton::clicked, this, [&] {
+        auto path = QFileDialog::getExistingDirectory(this,
+                                                      tr("Find Qwen3-ASR model folder"),
+                                                      Settings.qwen3AsrModelDir(),
+                                                      Util::getFileDialogOptions());
+        if (QFileInfo(path).isDir()) {
+            Settings.setQwen3AsrModelDir(path);
+            updateAsrStatus();
+        }
+    });
+    configLayout->addWidget(qwenModelBrowseButton, 4, 2, Qt::AlignLeft);
+
+    // Silero VAD model
+    QLabel *qwenVadLabel = new QLabel(tr("VAD model"));
+    configLayout->addWidget(qwenVadLabel, 5, 0, Qt::AlignRight);
+    m_qwenVadLabel = new QLineEdit(this);
+    m_qwenVadLabel->setFixedWidth(maxPathWidth);
+    m_qwenVadLabel->setPlaceholderText(tr("Select silero_vad.onnx"));
+    m_qwenVadLabel->setReadOnly(true);
+    configLayout->addWidget(m_qwenVadLabel, 5, 1, Qt::AlignLeft);
+    QPushButton *qwenVadBrowseButton = new QPushButton(this);
+    qwenVadBrowseButton->setIcon(
+        QIcon::fromTheme("document-open", QIcon(":/icons/oxygen/32x32/actions/document-open.png")));
+    connect(qwenVadBrowseButton, &QAbstractButton::clicked, this, [&] {
+        auto path = QFileDialog::getOpenFileName(this,
+                                                 tr("Find VAD model"),
+                                                 Settings.qwen3AsrVadModel(),
+                                                 "*.onnx",
+                                                 nullptr,
+                                                 Util::getFileDialogOptions());
+        if (QFileInfo(path).exists()) {
+            Settings.setQwen3AsrVadModel(path);
+            updateAsrStatus();
+        }
+    });
+    configLayout->addWidget(qwenVadBrowseButton, 5, 2, Qt::AlignLeft);
+
+    m_qwenWidgets << qwenExeLabel << m_qwenExeLabel << qwenExeBrowseButton << qwenModelLabel
+                  << m_qwenModelLabel << qwenModelBrowseButton << qwenVadLabel << m_qwenVadLabel
+                  << qwenVadBrowseButton;
 
     // Update Model button
     QPushButton *updateModelsButton = new QPushButton(tr("Refresh Models"), this);
@@ -248,7 +365,7 @@ TranscribeAudioDialog::TranscribeAudioDialog(const QString &trackName, QWidget *
             &QAbstractButton::clicked,
             this,
             &TranscribeAudioDialog::refreshModels);
-    configLayout->addWidget(updateModelsButton, 3, 1, Qt::AlignLeft);
+    configLayout->addWidget(updateModelsButton, 6, 1, Qt::AlignLeft);
 
     // List of models
     m_table = new QTreeView();
@@ -277,9 +394,10 @@ TranscribeAudioDialog::TranscribeAudioDialog(const QString &trackName, QWidget *
             this,
             &TranscribeAudioDialog::showModelContextMenu);
 
-    configLayout->addWidget(m_table, 4, 0, 1, 3);
+    configLayout->addWidget(m_table, 7, 0, 1, 3);
+    m_whisperWidgets << updateModelsButton << m_table;
 
-    grid->addWidget(m_configWidget, 7, 0, 1, 2);
+    grid->addWidget(m_configWidget, 8, 0, 1, 2);
 
     // Add a button box to the dialog
     m_buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
@@ -288,7 +406,11 @@ TranscribeAudioDialog::TranscribeAudioDialog(const QString &trackName, QWidget *
     connect(configButton, &QPushButton::toggled, this, [&](bool checked) {
         m_configWidget->setVisible(checked);
     });
-    updateWhisperStatus();
+    connect(m_engine,
+            qOverload<int>(&QComboBox::currentIndexChanged),
+            this,
+            &TranscribeAudioDialog::updateAsrStatus);
+    updateAsrStatus();
     QPushButton *okButton = m_buttonBox->button(QDialogButtonBox::Ok);
     if (!m_buttonBox->button(QDialogButtonBox::Ok)->isEnabled()) {
         // Show the config section
@@ -299,7 +421,7 @@ TranscribeAudioDialog::TranscribeAudioDialog(const QString &trackName, QWidget *
         m_configWidget->setVisible(false);
     }
     m_buttonBox->addButton(configButton, QDialogButtonBox::ActionRole);
-    grid->addWidget(m_buttonBox, 8, 0, 1, 2);
+    grid->addWidget(m_buttonBox, 9, 0, 1, 2);
     connect(m_buttonBox,
             SIGNAL(clicked(QAbstractButton *)),
             this,
@@ -326,6 +448,7 @@ void TranscribeAudioDialog::onButtonClicked(QAbstractButton *button)
 {
     QDialogButtonBox::ButtonRole role = m_buttonBox->buttonRole(button);
     if (role == QDialogButtonBox::AcceptRole) {
+        Settings.setAsrEngine(engine());
         Settings.setWhisperUseGpu(m_useGpu->checkState() == Qt::Checked);
         LOG_DEBUG() << "Accept";
         accept();
@@ -356,12 +479,17 @@ void TranscribeAudioDialog::onModelRowClicked(const QModelIndex &index)
         }
     }
     setCurrentModel(index.row());
-    updateWhisperStatus();
+    updateAsrStatus();
 }
 
 QString TranscribeAudioDialog::name()
 {
     return m_name->text();
+}
+
+QString TranscribeAudioDialog::engine()
+{
+    return m_engine->currentData().toString();
 }
 
 QString TranscribeAudioDialog::language()
@@ -392,6 +520,9 @@ bool TranscribeAudioDialog::useGpu()
 void TranscribeAudioDialog::showEvent(QShowEvent *event)
 {
     QDialog::showEvent(event);
+    if (engine() != QStringLiteral("whisper")) {
+        return;
+    }
     bool modelFound = QFileInfo(Settings.whisperModel()).exists();
     if (modelFound) {
         return;
@@ -412,7 +543,7 @@ void TranscribeAudioDialog::showEvent(QShowEvent *event)
         int index = m_model.getStandardIndex();
         downloadModel(index);
         setCurrentModel(index);
-        updateWhisperStatus();
+        updateAsrStatus();
     }
 }
 
@@ -466,13 +597,52 @@ void TranscribeAudioDialog::setCurrentModel(int index)
     }
 }
 
-void TranscribeAudioDialog::updateWhisperStatus()
+void TranscribeAudioDialog::updateAsrStatus()
 {
-    bool exeFound = QFileInfo(Settings.whisperExe()).isExecutable();
-    bool modelFound = QFileInfo(Settings.whisperModel()).exists();
+    const bool whisperEngine = engine() == QStringLiteral("whisper");
+    const bool qwenEngine = engine() == QStringLiteral("qwen3-asr-0.6b-int8");
+    for (QWidget *widget : m_whisperWidgets) {
+        widget->setVisible(whisperEngine);
+    }
+    for (QWidget *widget : m_qwenWidgets) {
+        widget->setVisible(qwenEngine);
+    }
+    if (!whisperEngine) {
+        for (int i = 0; i < m_lang->count(); ++i) {
+            if (m_lang->itemData(i).toString() == QStringLiteral("zh")) {
+                m_lang->setCurrentIndex(i);
+                break;
+            }
+        }
+    }
+    m_lang->setEnabled(whisperEngine);
+    m_translate->setEnabled(whisperEngine);
+    m_useGpu->setEnabled(whisperEngine);
 
-    m_exeLabel->setText(Settings.whisperExe());
+    const QString whisperExe = resolvedWhisperExecutable(Settings.whisperExe());
+    if (whisperExe != Settings.whisperExe()) {
+        Settings.setWhisperExe(whisperExe);
+    }
+    m_exeLabel->setText(whisperExe);
     m_modelLabel->setText(Settings.whisperModel());
+    m_qwenExeLabel->setText(Settings.qwen3AsrExe());
+    m_qwenModelLabel->setText(Settings.qwen3AsrModelDir());
+    m_qwenVadLabel->setText(Settings.qwen3AsrVadModel());
+
+    bool exeFound = false;
+    bool modelFound = false;
+    if (whisperEngine) {
+        exeFound = QFileInfo(whisperExe).isFile() && QFileInfo(whisperExe).isExecutable();
+        modelFound = QFileInfo(Settings.whisperModel()).exists();
+    } else if (qwenEngine) {
+        const QDir modelDir(Settings.qwen3AsrModelDir());
+        exeFound = QFileInfo(Settings.qwen3AsrExe()).isExecutable();
+        modelFound = QFileInfo(modelDir.absoluteFilePath(QStringLiteral("conv_frontend.onnx"))).exists()
+            && QFileInfo(modelDir.absoluteFilePath(QStringLiteral("encoder.int8.onnx"))).exists()
+            && QFileInfo(modelDir.absoluteFilePath(QStringLiteral("decoder.int8.onnx"))).exists()
+            && QFileInfo(modelDir.absoluteFilePath(QStringLiteral("tokenizer"))).isDir()
+            && QFileInfo(Settings.qwen3AsrVadModel()).exists();
+    }
 
     QPushButton *okButton = m_buttonBox->button(QDialogButtonBox::Ok);
     if (!exeFound || !modelFound) {
@@ -482,7 +652,7 @@ void TranscribeAudioDialog::updateWhisperStatus()
         okButton->setDisabled(false);
     }
 
-    if (exeFound) {
+    if (QFileInfo(whisperExe).isFile() && QFileInfo(whisperExe).isExecutable()) {
         QPalette palette;
         m_exeLabel->setPalette(palette);
         m_exeLabel->setToolTip(tr("Path to Whisper.cpp executable"));
@@ -493,7 +663,7 @@ void TranscribeAudioDialog::updateWhisperStatus()
         m_exeLabel->setToolTip(tr("Whisper.cpp executable not found"));
     }
 
-    if (modelFound) {
+    if (QFileInfo(Settings.whisperModel()).exists()) {
         QPalette palette;
         m_modelLabel->setPalette(palette);
         m_modelLabel->setToolTip(tr("Path to GGML model"));
@@ -509,6 +679,44 @@ void TranscribeAudioDialog::updateWhisperStatus()
         }
     }
 
+    if (QFileInfo(Settings.qwen3AsrExe()).isExecutable()) {
+        QPalette palette;
+        m_qwenExeLabel->setPalette(palette);
+        m_qwenExeLabel->setToolTip(tr("Path to Qwen3-ASR executable"));
+    } else {
+        QPalette palette;
+        palette.setColor(QPalette::Text, Qt::red);
+        m_qwenExeLabel->setPalette(palette);
+        m_qwenExeLabel->setToolTip(tr("Qwen3-ASR executable not found"));
+    }
+
+    const QDir qwenModelDir(Settings.qwen3AsrModelDir());
+    if (QFileInfo(qwenModelDir.absoluteFilePath(QStringLiteral("conv_frontend.onnx"))).exists()
+        && QFileInfo(qwenModelDir.absoluteFilePath(QStringLiteral("encoder.int8.onnx"))).exists()
+        && QFileInfo(qwenModelDir.absoluteFilePath(QStringLiteral("decoder.int8.onnx"))).exists()
+        && QFileInfo(qwenModelDir.absoluteFilePath(QStringLiteral("tokenizer"))).isDir()) {
+        QPalette palette;
+        m_qwenModelLabel->setPalette(palette);
+        m_qwenModelLabel->setToolTip(tr("Path to Qwen3-ASR model folder"));
+    } else {
+        QPalette palette;
+        palette.setColor(QPalette::Text, Qt::red);
+        m_qwenModelLabel->setPalette(palette);
+        m_qwenModelLabel->setToolTip(
+            tr("Qwen3-ASR model folder must contain conv_frontend.onnx, encoder.int8.onnx, decoder.int8.onnx, and tokenizer"));
+    }
+
+    if (QFileInfo(Settings.qwen3AsrVadModel()).exists()) {
+        QPalette palette;
+        m_qwenVadLabel->setPalette(palette);
+        m_qwenVadLabel->setToolTip(tr("Path to Silero VAD model"));
+    } else {
+        QPalette palette;
+        palette.setColor(QPalette::Text, Qt::red);
+        m_qwenVadLabel->setPalette(palette);
+        m_qwenVadLabel->setToolTip(tr("Silero VAD model not found"));
+    }
+
     QModelIndex index = m_model.getIndexForPath(Settings.whisperModel());
     m_table->setCurrentIndex(index);
 }
@@ -517,7 +725,7 @@ void TranscribeAudioDialog::showModelContextMenu(QPoint p)
 {
     QModelIndex index = m_table->indexAt(p);
     if (!index.isValid() || !m_model.downloaded(index.row())) {
-        updateWhisperStatus();
+        updateAsrStatus();
         return;
     }
     QMenu *menu = new QMenu(tr("Model"));
@@ -537,5 +745,5 @@ void TranscribeAudioDialog::showModelContextMenu(QPoint p)
     menu->addAction(action);
     menu->popup(QCursor::pos());
     menu->exec();
-    updateWhisperStatus();
+    updateAsrStatus();
 }

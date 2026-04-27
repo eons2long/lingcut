@@ -1716,6 +1716,67 @@ bool ShotcutSettings::whisperUseGpu() const
     return settings.value("subtitles/whisperUseGpu", true).toBool();
 }
 
+void ShotcutSettings::setAsrEngine(const QString &engine)
+{
+    settings.setValue("subtitles/asrEngine", engine);
+}
+
+QString ShotcutSettings::asrEngine() const
+{
+    return settings.value("subtitles/asrEngine", "whisper").toString();
+}
+
+void ShotcutSettings::setQwen3AsrExe(const QString &path)
+{
+    settings.setValue("subtitles/qwen3AsrExe", path);
+}
+
+QString ShotcutSettings::qwen3AsrExe()
+{
+    QDir dir(qApp->applicationDirPath());
+#if defined(Q_OS_WIN)
+    auto exe = "sherpa-onnx-vad-with-offline-asr.exe";
+#else
+    auto exe = "sherpa-onnx-vad-with-offline-asr";
+#endif
+    QString defaultPath = dir.absoluteFilePath(exe);
+    if (!QFileInfo(defaultPath).isExecutable()) {
+        QString systemPath = QStandardPaths::findExecutable(exe);
+        if (!systemPath.isEmpty()) {
+            defaultPath = systemPath;
+        }
+    }
+    return settings.value("subtitles/qwen3AsrExe", defaultPath).toString();
+}
+
+void ShotcutSettings::setQwen3AsrModelDir(const QString &path)
+{
+    settings.setValue("subtitles/qwen3AsrModelDir", path);
+}
+
+QString ShotcutSettings::qwen3AsrModelDir()
+{
+    QDir dataPath(appDataLocation());
+    dataPath.mkpath(QStringLiteral("shotcut/sherpa_models/sherpa-onnx-qwen3-asr-0.6B-int8-2026-03-25"));
+    dataPath.cd(QStringLiteral("shotcut/sherpa_models/sherpa-onnx-qwen3-asr-0.6B-int8-2026-03-25"));
+    return settings.value("subtitles/qwen3AsrModelDir", dataPath.absolutePath()).toString();
+}
+
+void ShotcutSettings::setQwen3AsrVadModel(const QString &path)
+{
+    settings.setValue("subtitles/qwen3AsrVadModel", path);
+}
+
+QString ShotcutSettings::qwen3AsrVadModel()
+{
+    QDir dataPath(appDataLocation());
+    dataPath.mkpath(QStringLiteral("shotcut/sherpa_models"));
+    dataPath.cd(QStringLiteral("shotcut/sherpa_models"));
+    return settings
+        .value("subtitles/qwen3AsrVadModel", dataPath.absoluteFilePath(QStringLiteral("silero_vad.onnx")))
+        .toString();
+}
+
 void ShotcutSettings::setNotesZoom(int zoom)
 {
     settings.setValue("notes/zoom", zoom);

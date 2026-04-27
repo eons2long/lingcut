@@ -41,6 +41,7 @@
 #include <QPalette>
 #include <QProcess>
 #include <QSaveFile>
+#include <QStandardPaths>
 #include <QTextStream>
 #include <QThreadPool>
 #include <QUuid>
@@ -57,6 +58,38 @@ static constexpr int kThumbnailOutSeekFactor = 5;
 static Controller *instance = nullptr;
 const QString XmlMimeType("application/vnd.mlt+xml");
 static constexpr char kMltXmlPropertyName[] = "string";
+
+static QFileInfo meltExecutable()
+{
+    QString shotcutPath = qApp->applicationDirPath();
+#if defined(Q_OS_UNIX) && !defined(Q_OS_MAC)
+    const QString exe = QStringLiteral("melt-7");
+#else
+    const QString exe = QStringLiteral("melt");
+#endif
+    QFileInfo meltPath(shotcutPath, exe);
+    if (meltPath.isExecutable()) {
+        return meltPath;
+    }
+
+    const QString systemPath = QStandardPaths::findExecutable(exe);
+    if (!systemPath.isEmpty()) {
+        return QFileInfo(systemPath);
+    }
+
+#ifdef Q_OS_MAC
+    const QStringList homebrewPaths{QStringLiteral("/opt/homebrew/bin/melt"),
+                                    QStringLiteral("/usr/local/bin/melt")};
+    for (const QString &path : homebrewPaths) {
+        QFileInfo info(path);
+        if (info.isExecutable()) {
+            return info;
+        }
+    }
+#endif
+
+    return meltPath;
+}
 
 Controller::Controller()
     : m_profile(kDefaultMltProfile)
@@ -1756,12 +1789,7 @@ int Controller::checkFile(const QString &path)
     if (path.endsWith(".json") || path.endsWith(".rawr") || path.endsWith(".lottie")
         || path.endsWith(".riv") || path.endsWith(".tgs") || path.endsWith(".avd")
         || path.endsWith(".aep")) {
-        QString shotcutPath = qApp->applicationDirPath();
-#if defined(Q_OS_UNIX) && !defined(Q_OS_MAC)
-        QFileInfo meltPath(shotcutPath, "melt-7");
-#else
-        QFileInfo meltPath(shotcutPath, "melt");
-#endif
+        QFileInfo meltPath = meltExecutable();
         QStringList args;
         args << "-quiet"
              << "-consumer"

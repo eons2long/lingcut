@@ -25,6 +25,7 @@
 #include "jobqueue.h"
 #include "jobs/kokorodokijob.h"
 #include "jobs/meltjob.h"
+#include "jobs/qwen3asrjob.h"
 #include "jobs/whisperjob.h"
 #include "mainwindow.h"
 #include "models/subtitlesmodel.h"
@@ -59,7 +60,22 @@
 #include <QVBoxLayout>
 #include <QtWidgets/QScrollArea>
 
+#include <functional>
+
 #define DEFAULT_ITEM_DURATION (2 * 1000)
+
+class CallbackPostJobAction : public PostJobAction
+{
+public:
+    explicit CallbackPostJobAction(std::function<void()> callback)
+        : m_callback(std::move(callback))
+    {}
+
+    void doAction() override { m_callback(); }
+
+private:
+    std::function<void()> m_callback;
+};
 
 static int64_t positionToMs(mlt_position position)
 {
@@ -1331,8 +1347,6 @@ void SubtitlesDock::speechToText()
                                   args,
                                   MLT.profile().frame_rate_num(),
                                   MLT.profile().frame_rate_den());
-    tmpWav->setParent(wavJob);
-    JOBS.add(wavJob);
 
     // Create a temporary srt file
     QTemporaryFile *tmpSrt = Util::writableTemporaryFile(tmpLocation, "shotcut-XXXXXX.srt");
@@ -1342,28 +1356,49 @@ void SubtitlesDock::speechToText()
     }
     tmpWav->close();
 
-    // Run speech transcription on the wav file
-    jobName = tr("Speech to Text");
-    WhisperJob *whisperJob = new WhisperJob(jobName,
-                                            tmpWav->fileName(),
-                                            tmpSrt->fileName(),
-                                            dialog.language(),
-                                            dialog.translate(),
-                                            dialog.maxLineLength(),
-                                            dialog.useGpu());
-    // Ensure the language code is 3 character (part 2)
-    QString langCode = dialog.language();
+    const QString engine = dialog.engine();
+    const QString language = dialog.language();
+    const bool translate = dialog.translate();
+    const int maxLineLength = dialog.maxLineLength();
+    const bool useGpu = dialog.useGpu();
+    const QString subtitleTrackName = dialog.name();
+    const bool includeNonspoken = dialog.includeNonspoken();
+
+    // Ensure the language code is 3 characters (part 2)
+    QString langCode = language;
     QLocale::Language lang = QLocale::codeToLanguage(langCode);
     if (lang != QLocale::AnyLanguage) {
         langCode = QLocale::languageToCode(lang, QLocale::ISO639Part2);
     }
-    whisperJob->setPostJobAction(new ImportSrtPostJobAction(tmpSrt->fileName(),
-                                                            dialog.name(),
-                                                            langCode,
-                                                            dialog.includeNonspoken(),
-                                                            this));
-    tmpSrt->setParent(whisperJob);
-    JOBS.add(whisperJob);
+
+    tmpWav->setParent(wavJob);
+    tmpSrt->setParent(wavJob);
+    wavJob->setPostJobAction(new CallbackPostJobAction([=]() {
+        AbstractJob *speechJob = nullptr;
+        if (engine == QStringLiteral("qwen3-asr-0.6b-int8")) {
+            speechJob = new Qwen3AsrJob(tr("Speech to Text"),
+                                        tmpWav->fileName(),
+                                        tmpSrt->fileName(),
+                                        maxLineLength);
+        } else {
+            speechJob = new WhisperJob(tr("Speech to Text"),
+                                       tmpWav->fileName(),
+                                       tmpSrt->fileName(),
+                                       language,
+                                       translate,
+                                       maxLineLength,
+                                       useGpu);
+        }
+        tmpWav->setParent(speechJob);
+        tmpSrt->setParent(speechJob);
+        speechJob->setPostJobAction(new ImportSrtPostJobAction(tmpSrt->fileName(),
+                                                               subtitleTrackName,
+                                                               langCode,
+                                                               includeNonspoken,
+                                                               this));
+        JOBS.add(speechJob);
+    }));
+    JOBS.add(wavJob);
 }
 
 void SubtitlesDock::textToSpeech()

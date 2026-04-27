@@ -35,6 +35,10 @@
 #include "macos.h"
 #endif
 
+#ifndef SHOTCUT_APPLICATION_NAME
+#define SHOTCUT_APPLICATION_NAME "Shotcut"
+#endif
+
 #ifdef Q_OS_WIN
 #include <windows.h>
 #if defined(QT_DEBUG) && !defined(__ARM_ARCH)
@@ -141,7 +145,7 @@ public:
 #else
         setOrganizationDomain("meltytech.com");
 #endif
-        setApplicationName("Shotcut");
+        setApplicationName(SHOTCUT_APPLICATION_NAME);
         setApplicationVersion(SHOTCUT_VERSION);
 
         // Process command line options.
