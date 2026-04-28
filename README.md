@@ -1,4 +1,6 @@
-# LingCut - a cross-platform **video editor** focused on subtitles
+# LingCut - a cross-platform **video editor**
+
+[简体中文](README.zh-CN.md)
 
 <div align="center">
 
@@ -6,12 +8,13 @@
 
 </div>
 
-LingCut is a Shotcut-based video editor focused on creator workflows, including
-local ASR subtitle generation and timeline editing improvements.
+LingCut is a Shotcut-based video editor with creator-oriented improvements,
+including local ASR subtitle generation and timeline editing enhancements.
 
 This repository is a fork of [Shotcut](https://github.com/mltframework/shotcut),
 a free, open source, cross-platform video editor.
 
+- Project repository: https://github.com/eons2long/lingcut
 - Upstream project: https://github.com/mltframework/shotcut
 - Upstream features: https://www.shotcut.org/features/
 
