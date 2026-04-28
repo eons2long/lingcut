@@ -31,9 +31,9 @@
     <key>LSMinimumSystemVersion</key>
 	<string>12.0.0</string>
 	<key>NSCameraUsageDescription</key>
-	<string>Shotcut can show and record video</string>
+	<string>@SHOTCUT_MACOS_BUNDLE_NAME@ can show and record video</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Shotcut can monitor and record audio</string>
+	<string>@SHOTCUT_MACOS_BUNDLE_NAME@ can monitor and record audio</string>
 	<key>UTImportedTypeDeclarations</key>
 	<array>
 		<dict>
