@@ -1,5 +1,5 @@
-blank_issues_enabled: false
+blank_issues_enabled: true
 contact_links:
-  - name: Shotcut Discussion Forum
-    url: https://forum.shotcut.org/
-    about: Please get help and make suggestions here.
+  - name: Upstream Shotcut project
+    url: https://github.com/mltframework/shotcut
+    about: Use upstream only for issues reproducible in the original Shotcut application.

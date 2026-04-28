@@ -1,2 +1,2 @@
-All translation updates must go through transifex.com.
-Pull requests for those will be rejected.
+LingCut currently inherits upstream Shotcut translations. Translation-only
+pull requests should wait until a LingCut translation workflow is set up.
