@@ -15,6 +15,8 @@
 
 # These are all of the configuration variables with defaults
 INSTALL_DIR="$HOME/shotcut"
+PRODUCT_NAME="LingCut"
+PRODUCT_SLUG="lingcut"
 AUTO_APPEND_DATE=0
 SOURCE_DIR="$INSTALL_DIR/src"
 ACTION_CLEAN_SOURCE=0
@@ -437,6 +439,12 @@ function set_globals {
   # Set convenience variables.
   test "$TARGET_OS" = "" && TARGET_OS="$(uname -s)"
   test "$TARGET_ARCH" = "" && TARGET_ARCH="$(uname -m)"
+  PRODUCT_NAME="${PRODUCT_NAME:-LingCut}"
+  PRODUCT_SLUG="${PRODUCT_SLUG:-lingcut}"
+  MACOS_APP_BUNDLE_NAME="${MACOS_APP_BUNDLE_NAME:-${PRODUCT_NAME}.app}"
+  MACOS_EXECUTABLE_NAME="${MACOS_EXECUTABLE_NAME:-${PRODUCT_NAME}}"
+  MACOS_DMG_VOLUME_NAME="${MACOS_DMG_VOLUME_NAME:-${PRODUCT_NAME}}"
+  MACOS_UNSIGNED_DMG_NAME="${MACOS_UNSIGNED_DMG_NAME:-${PRODUCT_SLUG}-macos-${SHOTCUT_VERSION}-unsigned.dmg}"
   if test 1 = "$ACTION_GET" ; then
     GET=1
   else
@@ -564,7 +572,7 @@ function set_globals {
   REPOLOCS[4]="https://chromium.googlesource.com/webm/libvpx.git"
   REPOLOCS[5]="https://github.com/ddennedy/movit.git"
   REPOLOCS[6]="https://github.com/ddennedy/libspatialaudio.git"
-  REPOLOCS[7]="https://github.com/mltframework/shotcut.git"
+  REPOLOCS[7]="https://github.com/eons2long/lingcut.git"
   REPOLOCS[8]="https://github.com/swh/ladspa.git"
   REPOLOCS[9]="https://github.com/OpenMathLib/OpenBLAS.git"
   REPOLOCS[10]="https://github.com/georgmartius/vid.stab.git"
@@ -1412,7 +1420,7 @@ function get_subproject {
           # No git repo
           debug "No git repo, need to check out"
           feedback_status "Cloning git sources for $1"
-          cmd git --no-pager clone --quiet --recurse-submodules $REPOLOC || die "Unable to git clone source for $1 from $REPOLOC"
+          cmd git --no-pager clone --quiet --recurse-submodules $REPOLOC $1 || die "Unable to git clone source for $1 from $REPOLOC"
           cmd cd $1 || die "Unable to change to directory $1"
           cmd git checkout --recurse-submodules $REVISION || die "Unable to git checkout $REVISION"
       fi
@@ -1876,7 +1884,7 @@ function deploy_mac
   log Changing directory to shotcut
   cmd cd shotcut || die "Unable to change to directory shotcut"
 
-  BUILD_DIR="./Shotcut.app/Contents"
+  BUILD_DIR="./${MACOS_APP_BUNDLE_NAME}/Contents"
 
   # copy Qt translations
   cmd mkdir -p "$BUILD_DIR/Resources/shotcut/translations"
@@ -1902,7 +1910,7 @@ function deploy_mac
   cmd cp -a "$FINAL_INSTALL_DIR"/bin/{melt,ffmpeg,ffplay,ffprobe,glaxnimate,gopro2gpx,whisper-cli} MacOS
   cmd mkdir -p Frameworks 2>/dev/null
   cmd cp -p ../../lib/libCuteLogger.dylib Frameworks
-  for exe in MacOS/Shotcut MacOS/melt MacOS/ffmpeg MacOS/ffplay MacOS/ffprobe MacOS/glaxnimate; do
+  for exe in "MacOS/${MACOS_EXECUTABLE_NAME}" MacOS/melt MacOS/ffmpeg MacOS/ffplay MacOS/ffprobe MacOS/glaxnimate; do
     fixlibs "$exe"
     log fixing rpath of executable "$exe"
     cmd install_name_tool -delete_rpath "$FINAL_INSTALL_DIR/lib" "$exe" 2> /dev/null
@@ -2010,19 +2018,19 @@ function deploy_mac
 
   if [ "$SDK" = "1" ]; then
     # Prepare src for archiving
-    cmd rm -rf "$INSTALL_DIR"/Shotcut
-    cmd mv shotcut/Shotcut.app "$INSTALL_DIR"/Shotcut
+    cmd rm -rf "$INSTALL_DIR/$PRODUCT_NAME"
+    cmd mv "shotcut/$MACOS_APP_BUNDLE_NAME" "$INSTALL_DIR/$PRODUCT_NAME"
     clean_dirs
     pushd "$INSTALL_DIR"
     log Copying src
-    cmd cp -a "$SOURCE_DIR" Shotcut
+    cmd cp -a "$SOURCE_DIR" "$PRODUCT_NAME"
     log Copying includes
-    cmd cp -a "$FINAL_INSTALL_DIR"/include Shotcut/Contents/Frameworks
+    cmd cp -a "$FINAL_INSTALL_DIR"/include "$PRODUCT_NAME/Contents/Frameworks"
     log Copying pkg-config files
-    cmd mkdir -p Shotcut/Contents/Frameworks/lib 2> /dev/null
-    cmd cp -a "$FINAL_INSTALL_DIR"/lib/pkgconfig Shotcut/Contents/Frameworks/lib
+    cmd mkdir -p "$PRODUCT_NAME/Contents/Frameworks/lib" 2> /dev/null
+    cmd cp -a "$FINAL_INSTALL_DIR"/lib/pkgconfig "$PRODUCT_NAME/Contents/Frameworks/lib"
     log Symlinking libs
-    pushd Shotcut/Contents/Frameworks
+    pushd "$PRODUCT_NAME/Contents/Frameworks"
     for lib in avcodec avdevice avfilter avformat avutil epoxy mlt++-7 mlt-7 movit mp3lame opus postproc swresample swscale vidstab whisper x264 x265; do
       dylib=$(ls lib$lib.*.dylib | head -n 1)
       cmd ln -sf $dylib lib$lib.dylib
@@ -2033,23 +2041,23 @@ function deploy_mac
   if [ "$ACTION_ARCHIVE" = "1" ]; then
     if [ "$SDK" = "1" ]; then
       log Making archive
-      cmd tar -cJvf shotcut.txz Shotcut
-      [ "$ACTION_CLEANUP" = "1" ] && cmd rm -rf Shotcut
+      cmd tar -cJvf "${PRODUCT_SLUG}.txz" "$PRODUCT_NAME"
+      [ "$ACTION_CLEANUP" = "1" ] && cmd rm -rf "$PRODUCT_NAME"
       popd
     else
       # build DMG
       log Staging disk image
       cmd rm -rf staging 2>/dev/null
       cmd mkdir staging
-      cmd mv shotcut/Shotcut.app staging
+      cmd mv "shotcut/$MACOS_APP_BUNDLE_NAME" staging
       cmd ln -s /Applications staging
       cmd cp shotcut/COPYING staging
 
       log Making disk image
-      dmg_name="$INSTALL_DIR/unsigned.dmg"
+      dmg_name="$INSTALL_DIR/$MACOS_UNSIGNED_DMG_NAME"
       cmd rm "$dmg_name" 2>/dev/null
       sync
-      cmd hdiutil create -fs HFS+ -srcfolder staging -volname Shotcut -format UDBZ -size 1500m "$dmg_name"
+      cmd hdiutil create -fs HFS+ -srcfolder staging -volname "$MACOS_DMG_VOLUME_NAME" -format UDBZ -size 1500m "$dmg_name"
 
       if [ "$ACTION_CLEANUP" = "1" ]; then
         cmd rm -rf staging

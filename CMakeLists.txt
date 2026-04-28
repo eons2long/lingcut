@@ -13,7 +13,7 @@ endif()
 project(shotcut
   VERSION ${SHOTCUT_VERSION}
   DESCRIPTION "cross-platform (Qt), open-source (GPLv3) video editor"
-  HOMEPAGE_URL "https://www.shotcut.org"
+  HOMEPAGE_URL "https://github.com/eons2long/lingcut"
   LANGUAGES CXX
 )
 
