@@ -256,6 +256,8 @@ add_custom_target(OTHER_FILES
   ../packaging/linux/shotcut.1
   ../packaging/linux/snapcraft.yaml.in
   ../packaging/macos/Info.plist.in
+  ../packaging/macos/lingcut.icns
+  ../packaging/macos/lingcut.svg
   ../packaging/macos/shotcut.icns
   ../packaging/windows/shotcut.iss
   ../packaging/windows/shotcut.rc.in
@@ -343,12 +345,10 @@ if(APPLE)
   set(SHOTCUT_MACOS_BUNDLE_NAME "LingCut")
   set(SHOTCUT_MACOS_EXECUTABLE_NAME "LingCut")
   set(SHOTCUT_MACOS_BUNDLE_IDENTIFIER "io.github.eons2long.LingCut")
-  set(SHOTCUT_MACOS_ICON_NAME "shotcut.icns")
-  set(APP_ICON ${CMAKE_SOURCE_DIR}/packaging/macos/shotcut.icns)
+  set(SHOTCUT_MACOS_ICON_NAME "lingcut.icns")
+  set(APP_ICON ${CMAKE_SOURCE_DIR}/packaging/macos/lingcut.icns)
   if(SHOTCUT_DEV_BUNDLE)
     set(SHOTCUT_MACOS_BUNDLE_IDENTIFIER "io.github.eons2long.LingCutDev")
-    set(SHOTCUT_MACOS_ICON_NAME "shotcut-dev.icns")
-    set(APP_ICON ${CMAKE_SOURCE_DIR}/packaging/macos/shotcut-dev.icns)
   endif()
   target_compile_definitions(shotcut PRIVATE SHOTCUT_APPLICATION_NAME="${SHOTCUT_MACOS_BUNDLE_NAME}")
   set_target_properties(shotcut PROPERTIES

@@ -414,7 +414,7 @@ int main(int argc, char **argv)
 #ifdef Q_OS_WIN
     if (::qEnvironmentVariableIsSet("QSG_RHI_BACKEND")) {
 #endif
-        QSplashScreen splash(QPixmap(":/icons/shotcut-logo-320x320.png"));
+        QSplashScreen splash(QPixmap(":/icons/lingcut-logo-320x320.png"));
 
         // Log some basic info.
         LOG_INFO() << "Starting Shotcut version" << SHOTCUT_VERSION;

@@ -452,6 +452,7 @@ private:
     explicit ShotcutSettings();
     explicit ShotcutSettings(const QString &appDataLocation);
     void migrateRecent();
+    void migrateLegacyRecent();
     void migrateLayout();
 
     QSettings settings;

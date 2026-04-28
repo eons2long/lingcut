@@ -492,7 +492,7 @@
 				<string>mlt</string>
 			</array>
 			<key>CFBundleTypeIconFile</key>
-			<string>shotcut.icns</string>
+			<string>@SHOTCUT_MACOS_ICON_NAME@</string>
 			<key>CFBundleTypeMIMETypes</key>
 			<array>
 			<string>application/vnd.mlt+xml</string>

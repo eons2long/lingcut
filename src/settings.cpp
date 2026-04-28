@@ -28,6 +28,7 @@
 #include <QColorDialog>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QLocale>
 #include <QMediaDevices>
 #include <QStandardPaths>
@@ -55,6 +56,54 @@ static constexpr ModeMap kModeMap[] = {
     {ShotcutSettings::Linear10Cpu, "Linear10Cpu"},
     {ShotcutSettings::Linear10GpuCpu, "Linear10GpuCpu"},
 };
+
+static QStringList nonEmptyList(const QVariant &value)
+{
+    QStringList result;
+    for (const auto &item : value.toStringList()) {
+        const QString trimmed = item.trimmed();
+        if (!trimmed.isEmpty()) {
+            result << trimmed;
+        }
+    }
+    return result;
+}
+
+static void appendUnique(QStringList &target, const QStringList &source)
+{
+    for (const auto &item : source) {
+        if (item.size() < ShotcutSettings::MaxPath && !target.contains(item)) {
+            target << item;
+        }
+    }
+}
+
+static void addUniquePath(QStringList &target, const QString &path)
+{
+    const QString cleanPath = QDir::cleanPath(path);
+    if (!cleanPath.isEmpty() && !target.contains(cleanPath)) {
+        target << cleanPath;
+    }
+}
+
+static QStringList legacyAppDataLocations(const QString &currentLocation)
+{
+    QStringList result;
+    const QString current = QDir::cleanPath(currentLocation);
+
+    QDir siblingDir(current);
+    if (siblingDir.cdUp()) {
+        addUniquePath(result, siblingDir.filePath(QStringLiteral("Shotcut Dev")));
+        addUniquePath(result, siblingDir.filePath(QStringLiteral("Shotcut")));
+    }
+
+    const QDir genericDataDir(QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation));
+    addUniquePath(result, genericDataDir.filePath(QStringLiteral("Meltytech/Shotcut Dev")));
+    addUniquePath(result, genericDataDir.filePath(QStringLiteral("Meltytech/Shotcut")));
+
+    result.removeAll(current);
+    return result;
+}
 } // anonymous namespace
 
 ShotcutSettings &ShotcutSettings::singleton()
@@ -80,6 +129,7 @@ ShotcutSettings::ShotcutSettings()
 {
     migrateLayout();
     migrateRecent();
+    migrateLegacyRecent();
 }
 
 ShotcutSettings::ShotcutSettings(const QString &appDataLocation)
@@ -90,6 +140,7 @@ ShotcutSettings::ShotcutSettings(const QString &appDataLocation)
 {
     migrateLayout();
     migrateRecent();
+    migrateLegacyRecent();
 }
 
 void ShotcutSettings::migrateRecent()
@@ -110,6 +161,45 @@ void ShotcutSettings::migrateRecent()
         m_recent.sync();
         //        settings.remove("recent");
         settings.sync();
+    }
+}
+
+void ShotcutSettings::migrateLegacyRecent()
+{
+    if (!nonEmptyList(m_recent.value(kRecentKey)).isEmpty()
+        || !nonEmptyList(m_recent.value(kProjectsKey)).isEmpty()) {
+        return;
+    }
+
+    QStringList migratedRecent;
+    QStringList migratedProjects;
+    for (const auto &location : legacyAppDataLocations(appDataLocation())) {
+        const QString recentFile = QDir(location).filePath(RECENT_INI_FILENAME);
+        if (!QFileInfo::exists(recentFile)) {
+            continue;
+        }
+
+        QSettings legacyRecent(recentFile, QSettings::IniFormat);
+        appendUnique(migratedRecent, nonEmptyList(legacyRecent.value(kRecentKey)));
+        appendUnique(migratedProjects, nonEmptyList(legacyRecent.value(kProjectsKey)));
+    }
+
+    if (migratedProjects.isEmpty()) {
+        for (const auto &path : migratedRecent) {
+            if (path.endsWith(QStringLiteral(".mlt"), Qt::CaseInsensitive)) {
+                migratedProjects << path;
+            }
+        }
+    }
+
+    if (!migratedRecent.isEmpty()) {
+        setRecent(migratedRecent);
+    }
+    if (!migratedProjects.isEmpty()) {
+        setProjects(migratedProjects);
+    }
+    if (!migratedRecent.isEmpty() || !migratedProjects.isEmpty()) {
+        m_recent.sync();
     }
 }
 
